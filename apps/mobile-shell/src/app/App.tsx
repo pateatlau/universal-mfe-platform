@@ -1,80 +1,47 @@
-import React, { Suspense, lazy } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-
-/**
- * Lazy load remote components
- * In production, these would be loaded via manifest
- */
-const HomeScreen = lazy(() =>
-  import('feature_home_remote/HomeScreen').catch(() => ({
-    default: () => (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Failed to load Home Screen</Text>
-      </View>
-    ),
-  }))
-);
-
-/**
- * Loading fallback component
- */
-const LoadingFallback: React.FC = () => (
-  <View style={styles.loadingContainer}>
-    <ActivityIndicator size="large" color="#666666" />
-    <Text style={styles.loadingText}>Loading...</Text>
-  </View>
-);
-
-const Stack = createNativeStackNavigator();
+import React from 'react';
+import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
+import { HelloWorld } from '@universal-mfe-platform/ui-universal';
 
 /**
  * Mobile Shell Application
- * 
- * Host application that handles navigation and loads remotes via Module Federation.
+ *
+ * Simple native app for initial testing.
+ * Module Federation will be configured with Re.Pack.
  */
 const App: React.FC = () => {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
-        <Stack.Screen
-          name="Home"
-          options={{ title: 'Home' }}
-        >
-          {() => (
-            <Suspense fallback={<LoadingFallback />}>
-              <HomeScreen />
-            </Suspense>
-          )}
-        </Stack.Screen>
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <HelloWorld
+          title="Mobile Shell"
+          message="React Native app is running successfully!"
+        />
+        <Text style={styles.infoText}>
+          This is the native mobile shell. Module Federation for native will be
+          configured with Re.Pack.
+        </Text>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  loadingContainer: {
+  container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
   },
-  loadingText: {
-    fontSize: 18,
-    color: '#666666',
-    marginTop: 12,
-  },
-  errorContainer: {
+  content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  errorText: {
-    fontSize: 16,
-    color: '#ff0000',
+  infoText: {
+    marginTop: 20,
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
   },
 });
 
 export default App;
-

@@ -23,7 +23,9 @@
     },
     "run-android": {
       "executor": "@nx/react-native:run-android",
-      "options": {}
+      "options": {
+        "mode": "debug"
+      }
     },
     "bundle": {
       "executor": "@nx/react-native:bundle",
