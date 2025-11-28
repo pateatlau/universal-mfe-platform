@@ -1,116 +1,76 @@
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 
-/**
- * Error fallback component for when remote fails to load
- */
-const RemoteErrorFallback: React.FC = () => (
-  <View style={styles.errorContainer}>
-    <Text style={styles.errorText}>Failed to load Home Screen</Text>
-    <Text style={styles.errorSubtext}>
-      Make sure the remote is running on http://localhost:4201
-    </Text>
-  </View>
-);
+// Remote loading function
+async function loadRemoteComponent() {
+  const container = await import('hello_remote/HelloRemote');
+  return container.default;
+}
 
-/**
- * Lazy load remote components
- * In production, these would be loaded via manifest
- * Note: The remote exports HomeScreen as a named export, so we need to map it to default
- */
-const HomeScreen = lazy(async () => {
-  try {
-    const module = await import('feature_home_remote/HomeScreen');
-    // The remote exports HomeScreen as a named export, map it to default for lazy()
-    const Component = module.HomeScreen || module.default;
-    if (!Component) {
-      throw new Error('HomeScreen component not found in remote module');
+function App() {
+  const [RemoteComponent, setRemoteComponent] = useState<React.ComponentType | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleLoadRemote = async () => {
+    setLoading(true);
+    try {
+      const Component = await loadRemoteComponent();
+      setRemoteComponent(() => Component);
+    } catch (error) {
+      console.error('Failed to load remote:', error);
+    } finally {
+      setLoading(false);
     }
-    return { default: Component };
-  } catch (error) {
-    console.warn('Failed to load HomeScreen remote:', error);
-    // Return the fallback component
-    return { default: RemoteErrorFallback };
-  }
-});
+  };
 
-/**
- * Loading fallback component
- */
-const LoadingFallback: React.FC = () => (
-  <View style={styles.loadingContainer}>
-    <Text style={styles.loadingText}>Loading...</Text>
-  </View>
-);
-
-/**
- * Web Shell Application
- *
- * Host application that handles routing and loads remotes via Module Federation.
- */
-const App: React.FC = () => {
   return (
-    <BrowserRouter
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
-      <View style={styles.container}>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <Suspense fallback={<LoadingFallback />}>
-                <HomeScreen />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/home"
-            element={
-              <Suspense fallback={<LoadingFallback />}>
-                <HomeScreen />
-              </Suspense>
-            }
-          />
-        </Routes>
-      </View>
-    </BrowserRouter>
+    <View style={styles.container}>
+      <Text style={styles.title}>Universal MFE Seed</Text>
+      <Pressable style={styles.button} onPress={handleLoadRemote} disabled={loading}>
+        <Text style={styles.buttonText}>
+          {loading ? 'Loading...' : 'Load Hello Remote'}
+        </Text>
+      </Pressable>
+      {RemoteComponent && (
+        <View style={styles.remoteContainer}>
+          <RemoteComponent />
+        </View>
+      )}
+    </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width: '100%',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 18,
-    color: '#666666',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
   },
-  errorText: {
-    fontSize: 16,
-    color: '#ff0000',
-    marginBottom: 8,
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginBottom: 30,
+    color: '#000000',
   },
-  errorSubtext: {
-    fontSize: 14,
-    color: '#666666',
-    textAlign: 'center',
+  button: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  buttonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  remoteContainer: {
+    marginTop: 20,
+    width: '100%',
+    alignItems: 'center',
   },
 });
 
-export default App;
+export { App };

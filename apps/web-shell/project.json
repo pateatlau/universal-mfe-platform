@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/web-shell/src",
   "projectType": "application",
-  "tags": ["type:app", "scope:shell"],
+  "tags": [],
   "targets": {
     "build": {
       "executor": "@nx/rspack:rspack",
@@ -15,9 +15,10 @@
         "main": "apps/web-shell/src/main.tsx",
         "tsConfig": "apps/web-shell/tsconfig.app.json",
         "rspackConfig": "apps/web-shell/rspack.config.js",
-        "assets": [],
-        "generateIndexHtml": false,
-        "styles": []
+        "assets": [
+          "apps/web-shell/src/favicon.ico",
+          "apps/web-shell/src/assets"
+        ]
       },
       "configurations": {
         "development": {
@@ -42,10 +43,6 @@
           "buildTarget": "web-shell:build:production"
         }
       }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint"
     }
   }
 }
-

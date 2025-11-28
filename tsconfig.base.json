@@ -10,16 +10,12 @@
     "importHelpers": true,
     "target": "ES2022",
     "module": "ESNext",
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@universal-mfe-platform/ui-universal": ["libs/ui-universal/src/index.ts"],
-      "@universal-mfe-platform/api": ["libs/api/src/index.ts"],
-      "@universal-mfe-platform/app-state": ["libs/app-state/src/index.ts"],
-      "@universal-mfe-platform/event-bus": ["libs/event-bus/src/index.ts"],
-      "@universal-mfe-platform/config-mf": ["libs/config-mf/src/index.ts"]
+      "@universal-mfe-platform/shared-utils": ["libs/shared-utils/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

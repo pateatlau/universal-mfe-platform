@@ -3,73 +3,15 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/mobile-shell/src",
   "projectType": "application",
-  "tags": ["type:app", "scope:shell"],
+  "tags": [],
   "targets": {
-    "serve": {
-      "executor": "@nx/react-native:start",
-      "options": {
-        "port": 8081
-      }
-    },
-    "serve-repack": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "npx react-native webpack-start --webpackConfig webpack.config.mjs --port 8081",
-        "cwd": "apps/mobile-shell"
-      }
-    },
-    "start": {
-      "executor": "@nx/react-native:start",
-      "options": {
-        "port": 8081
-      }
-    },
-    "run-ios": {
+    "ios": {
       "executor": "@nx/react-native:run-ios",
       "options": {}
     },
-    "run-android": {
+    "android": {
       "executor": "@nx/react-native:run-android",
-      "options": {
-        "mode": "debug"
-      }
-    },
-    "bundle": {
-      "executor": "@nx/react-native:bundle",
-      "outputs": ["{options.bundleOutput}"],
-      "options": {
-        "entryFile": "apps/mobile-shell/index.js",
-        "platform": "ios",
-        "bundleOutput": "dist/apps/mobile-shell/ios/main.jsbundle"
-      },
-      "configurations": {
-        "ios": {
-          "platform": "ios",
-          "bundleOutput": "dist/apps/mobile-shell/ios/main.jsbundle"
-        },
-        "android": {
-          "platform": "android",
-          "bundleOutput": "dist/apps/mobile-shell/android/main.jsbundle"
-        }
-      }
-    },
-    "bundle-repack": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "npx react-native webpack-bundle --webpackConfig webpack.config.mjs --platform android --entry-file index.js --bundle-output dist/android/index.bundle",
-        "cwd": "apps/mobile-shell"
-      },
-      "configurations": {
-        "ios": {
-          "command": "npx react-native webpack-bundle --webpackConfig webpack.config.mjs --platform ios --entry-file index.js --bundle-output dist/ios/index.bundle"
-        },
-        "android": {
-          "command": "npx react-native webpack-bundle --webpackConfig webpack.config.mjs --platform android --entry-file index.js --bundle-output dist/android/index.bundle"
-        }
-      }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint"
+      "options": {}
     }
   }
 }

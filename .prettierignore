@@ -1,6 +1,5 @@
-node_modules
-dist
-coverage
-.nx
-*.log
-
+# Add files here to ignore them from prettier formatting
+/dist
+/coverage
+/.nx/cache
+/.nx/workspace-data

@@ -22,7 +22,7 @@ class MainApplication : Application(), ReactApplication {
               // add(MyReactNativePackage())
             }
 
-        override fun getJSMainModuleName(): String = "apps/mobile-shell/index"
+        override fun getJSMainModuleName(): String = "src/main"
 
         override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
 
@@ -42,4 +42,3 @@ class MainApplication : Application(), ReactApplication {
     }
   }
 }
-
