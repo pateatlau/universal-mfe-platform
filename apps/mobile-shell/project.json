@@ -5,6 +5,12 @@
   "projectType": "application",
   "tags": ["type:app", "scope:shell"],
   "targets": {
+    "serve": {
+      "executor": "@nx/react-native:start",
+      "options": {
+        "port": 8081
+      }
+    },
     "start": {
       "executor": "@nx/react-native:start",
       "options": {
@@ -43,4 +49,3 @@
     }
   }
 }
-
