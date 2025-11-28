@@ -1,0 +1,46 @@
+{
+  "name": "mobile-shell",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/mobile-shell/src",
+  "projectType": "application",
+  "tags": ["type:app", "scope:shell"],
+  "targets": {
+    "start": {
+      "executor": "@nx/react-native:start",
+      "options": {
+        "port": 8081
+      }
+    },
+    "run-ios": {
+      "executor": "@nx/react-native:run-ios",
+      "options": {}
+    },
+    "run-android": {
+      "executor": "@nx/react-native:run-android",
+      "options": {}
+    },
+    "bundle": {
+      "executor": "@nx/react-native:bundle",
+      "outputs": ["{options.bundleOutput}"],
+      "options": {
+        "entryFile": "apps/mobile-shell/src/main.tsx",
+        "platform": "ios",
+        "bundleOutput": "dist/apps/mobile-shell/ios/main.jsbundle"
+      },
+      "configurations": {
+        "ios": {
+          "platform": "ios",
+          "bundleOutput": "dist/apps/mobile-shell/ios/main.jsbundle"
+        },
+        "android": {
+          "platform": "android",
+          "bundleOutput": "dist/apps/mobile-shell/android/main.jsbundle"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}
+

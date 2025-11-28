@@ -1,0 +1,49 @@
+{
+  "name": "feature-home-remote",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/feature-home-remote/src",
+  "projectType": "application",
+  "tags": ["type:app", "scope:remote"],
+  "targets": {
+    "build": {
+      "executor": "@nx/rspack:rspack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "web",
+        "outputPath": "dist/apps/feature-home-remote",
+        "main": "apps/feature-home-remote/src/main.web.tsx",
+        "tsConfig": "apps/feature-home-remote/tsconfig.app.json",
+        "rspackConfig": "apps/feature-home-remote/rspack.config.js",
+        "assets": [],
+        "styles": []
+      },
+      "configurations": {
+        "development": {
+          "mode": "development"
+        },
+        "production": {
+          "mode": "production"
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/rspack:dev-server",
+      "options": {
+        "buildTarget": "feature-home-remote:build",
+        "port": 4201
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "feature-home-remote:build:development"
+        },
+        "production": {
+          "buildTarget": "feature-home-remote:build:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

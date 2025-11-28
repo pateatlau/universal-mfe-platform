@@ -1,0 +1,51 @@
+{
+  "name": "web-shell",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/web-shell/src",
+  "projectType": "application",
+  "tags": ["type:app", "scope:shell"],
+  "targets": {
+    "build": {
+      "executor": "@nx/rspack:rspack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "web",
+        "outputPath": "dist/apps/web-shell",
+        "main": "apps/web-shell/src/main.tsx",
+        "tsConfig": "apps/web-shell/tsconfig.app.json",
+        "rspackConfig": "apps/web-shell/rspack.config.js",
+        "assets": [],
+        "generateIndexHtml": false,
+        "styles": []
+      },
+      "configurations": {
+        "development": {
+          "mode": "development"
+        },
+        "production": {
+          "mode": "production"
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/rspack:dev-server",
+      "options": {
+        "buildTarget": "web-shell:build",
+        "port": 4200
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "web-shell:build:development"
+        },
+        "production": {
+          "buildTarget": "web-shell:build:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}
+

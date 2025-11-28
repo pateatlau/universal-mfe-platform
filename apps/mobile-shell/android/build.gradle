@@ -1,0 +1,33 @@
+// Placeholder Android build.gradle
+// This will be configured by React Native CLI or Nx
+
+buildscript {
+    ext {
+        buildToolsVersion = "33.0.0"
+        minSdkVersion = 21
+        compileSdkVersion = 33
+        targetSdkVersion = 33
+        ndkVersion = "23.1.7779620"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:7.4.2")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+    }
+}
+
+apply plugin: "com.android.application"
+apply plugin: "com.facebook.react"
+
+react {
+    /* Autolinking */
+}
+
+dependencies {
+    implementation("com.facebook.react:react-android")
+    implementation("com.facebook.react:hermes-android")
+}
+
