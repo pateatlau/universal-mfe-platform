@@ -4,3 +4,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autoli
 rootProject.name = 'MobileShell'
 include ':app'
 includeBuild('../../../node_modules/@react-native/gradle-plugin')
+
+// Include Re.Pack's Android module
+include ':repack'
+project(':repack').projectDir = new File('../../../node_modules/@callstack/repack/android')

@@ -27,11 +27,11 @@ react {
     //   A list containing the node command and its flags. Default is just 'node'.
     // nodeExecutableAndArgs = ["node"]
     //
-    //   The command to run when bundling. By default is 'bundle'
-    // bundleCommand = "ram-bundle"
+    //   The command to run when bundling. Using Re.Pack instead of Metro
+    bundleCommand = "webpack-bundle"
     //
     //   The path to the CLI configuration file. Default is empty.
-    // bundleConfig = file(../rn-cli.config.js)
+    bundleConfig = file("../../react-native.config.js")
     //
     //   The name of the generated asset file containing your JS bundle
     // bundleAssetName = "MyApplication.android.bundle"
@@ -116,4 +116,7 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+    
+    // Re.Pack's native module
+    implementation project(':repack')
 }

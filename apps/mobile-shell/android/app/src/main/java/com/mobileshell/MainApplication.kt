@@ -11,6 +11,7 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
+import com.callstack.repack.ScriptManagerPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -18,11 +19,11 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
-              // Packages that cannot be autolinked yet can be added manually here, for example:
-              // add(MyReactNativePackage())
+              // Manually add Re.Pack's native module since autolinking doesn't work in Nx monorepo
+              add(ScriptManagerPackage())
             }
 
-        override fun getJSMainModuleName(): String = "src/main"
+        override fun getJSMainModuleName(): String = "main"
 
         override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
 

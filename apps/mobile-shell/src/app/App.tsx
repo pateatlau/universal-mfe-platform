@@ -4,10 +4,10 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 // Remote loading function
 async function loadRemoteComponent() {
   const container = await import('hello_remote/HelloRemote');
-  return container.default;
+  return container.HelloRemote || container.default;
 }
 
-export const App = () => {
+const App = () => {
   const [RemoteComponent, setRemoteComponent] = useState<React.ComponentType | null>(null);
   const [loading, setLoading] = useState(false);
 
