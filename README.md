@@ -50,6 +50,14 @@ This workspace is prepared for development. Once apps are created, you'll be abl
 - `npm run mobile-shell:android` - Run mobile shell on Android
 - `npm run hello-remote:serve` - Start hello-remote dev server
 
+## Mobile Shell (Android)
+
+### Known Limitations
+
+**Module Federation**: Currently disabled on mobile-shell due to a runtime error ("Cannot read property 'prototype' of undefined") in Module Federation runtime code. The app works fine without Module Federation, but remote MFE loading is not available. This appears to require the real ScriptManager TurboModule to work properly. The web-shell works with Module Federation since it doesn't require the native module.
+
+**Workaround**: A mock ScriptManager is used to allow the app to run without the native TurboModule, but Module Federation requires the real native module to function correctly.
+
 ## Configuration
 
 - **TypeScript**: Configured with path mappings in `tsconfig.base.json`

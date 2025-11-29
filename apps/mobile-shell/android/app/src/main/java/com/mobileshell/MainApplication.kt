@@ -19,8 +19,10 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
+              // CRITICAL: Add Re.Pack's native module FIRST before other packages
+              // This ensures TurboModule registration happens early
               // Manually add Re.Pack's native module since autolinking doesn't work in Nx monorepo
-              add(ScriptManagerPackage())
+              add(0, ScriptManagerPackage()) // Add at index 0 to ensure it's registered first
             }
 
         override fun getJSMainModuleName(): String = "main"
@@ -37,6 +39,16 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     SoLoader.init(this, OpenSourceMergedSoMapping)
+    
+    // Ensure Re.Pack's native library is loaded before New Architecture initialization
+    // This is critical for TurboModule registration
+    try {
+      System.loadLibrary("callstack-repack")
+    } catch (e: UnsatisfiedLinkError) {
+      // Library might already be loaded, that's okay
+      android.util.Log.d("MainApplication", "callstack-repack library: ${e.message}")
+    }
+    
     if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
       // If you opted-in for the New Architecture, we load the native entry point for this app.
       load()

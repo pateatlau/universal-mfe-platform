@@ -61,7 +61,13 @@ module.exports = defineRspackConfig({
         path: join(__dirname, '../../dist/apps/mobile-shell'),
       },
     }),
-    // Removed NormalModuleReplacementPlugin for NativeScriptManager - now using official ScriptManager API
+    // Re-enable the mock with improved prototype handling
+    // The real TurboModule isn't being found in New Architecture, so we use a mock
+    // that properly implements the prototype chain to satisfy Module Federation
+    new NormalModuleReplacementPlugin(
+      /@callstack\/repack\/dist\/modules\/ScriptManager\/NativeScriptManager\.js$/,
+      join(__dirname, 'src/repack-patch.js')
+    ),
     // Replace DTS plugin with a mock - the real one tries to create websockets
     // which is not compatible with React Native environment
     new NormalModuleReplacementPlugin(
@@ -80,8 +86,8 @@ module.exports = defineRspackConfig({
         hello_remote: 'hello_remote@http://localhost:9004/remoteEntry.js',
       },
       shared: {
-        react: { singleton: true, eager: false, requiredVersion: '^19.0.0' },
-        'react-native': { singleton: true, eager: false, requiredVersion: '~0.79.3' },
+        react: { singleton: true, eager: true, requiredVersion: '^19.0.0' },
+        'react-native': { singleton: true, eager: true, requiredVersion: '~0.79.3' },
       },
       // Disable DTS plugin - it tries to create websockets which breaks in React Native
       // Module Federation only adds DTS plugin if dts !== false

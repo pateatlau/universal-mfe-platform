@@ -5,27 +5,28 @@ const { NormalModuleReplacementPlugin } = require('@rspack/core');
 module.exports = defineRspackConfig({
   mode: process.env['NODE_ENV'] === 'production' ? 'production' : 'development',
   context: __dirname,
-  entry: './src/main.tsx',
+  entry: './src/main-mobile.tsx',
   target: 'async-node',
   output: {
-    path: join(__dirname, '../../dist/apps/mobile-shell'),
-    publicPath: 'http://localhost:8081/',
+    path: join(__dirname, '../../dist/apps/hello-remote-mobile'),
+    publicPath: 'http://localhost:9004/',
     chunkFilename: '[name].chunk.bundle',
     filename: '[name].bundle',
     globalObject: 'globalThis',
   },
   devServer: {
-    port: 8081,
-    host: '0.0.0.0',
+    port: 9004,
+    host: '0.0.0.0', // Listen on all interfaces so Android emulator can access via 10.0.2.2
     headers: {
       'Access-Control-Allow-Origin': '*',
     },
     allowedHosts: 'all',
   },
   resolve: {
-    ...getResolveOptions('android'), // Pass platform to resolve platform-specific extensions
+    ...getResolveOptions('android'), // Use android for consistency with mobile-shell
     alias: {
       'react-native$': require.resolve('react-native'),
+      '@universal-mfe-platform/shared-utils': join(__dirname, '../../libs/shared-utils/src/index.ts'),
     },
   },
   module: {
@@ -33,13 +34,12 @@ module.exports = defineRspackConfig({
       ...getJsTransformRules({
         flow: {
           enabled: true,
-          all: true, // Process all files, not just those with @flow
+          all: true,
         },
         codegen: {
           enabled: true,
         },
       }).map(rule => {
-        // Ensure Re.Pack's own ES modules are processed
         if (rule.test && rule.test.toString().includes('js|ts')) {
           return {
             ...rule,
@@ -58,33 +58,25 @@ module.exports = defineRspackConfig({
     new RepackPlugin({
       platform: 'android',
       output: {
-        path: join(__dirname, '../../dist/apps/mobile-shell'),
+        path: join(__dirname, '../../dist/apps/hello-remote-mobile'),
       },
     }),
-    // Removed NormalModuleReplacementPlugin for NativeScriptManager - now using official ScriptManager API
-    // Replace DTS plugin with a mock - the real one tries to create websockets
-    // which is not compatible with React Native environment
+    // Replace DTS plugin with a mock - it tries to create websockets
     new NormalModuleReplacementPlugin(
       /@module-federation\/dts-plugin\/dist\/dynamic-remote-type-hints-plugin\.js$/,
       join(__dirname, 'src/dts-plugin-mock.js')
     ),
-    // Re-enabled Module Federation - trying to get real TurboModule to work
-    // Use 10.0.2.2 for Android emulator (maps to host machine's localhost)
-    // In production, this would be a real server URL
-    // Exclude DTS plugin from runtime plugins - it tries to create websockets which breaks in React Native
+    // Use Re.Pack's ModuleFederationPluginV2 for mobile compatibility
     new plugins.ModuleFederationPluginV2({
-      name: 'mobile_shell',
-      remotes: {
-        // Use Re.Pack-built remote entry for mobile compatibility (port 9004)
-        // Run: adb reverse tcp:9004 tcp:9004 to forward the port
-        hello_remote: 'hello_remote@http://localhost:9004/remoteEntry.js',
+      name: 'hello_remote',
+      filename: 'remoteEntry.js',
+      exposes: {
+        './HelloRemote': './src/app/HelloRemote',
       },
       shared: {
         react: { singleton: true, eager: false, requiredVersion: '^19.0.0' },
         'react-native': { singleton: true, eager: false, requiredVersion: '~0.79.3' },
       },
-      // Disable DTS plugin - it tries to create websockets which breaks in React Native
-      // Module Federation only adds DTS plugin if dts !== false
       dts: false,
     }),
   ],

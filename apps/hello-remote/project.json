@@ -43,6 +43,42 @@
           "buildTarget": "hello-remote:build:production"
         }
       }
+    },
+    "build:mobile": {
+      "executor": "@nx/rspack:rspack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "outputPath": "dist/apps/hello-remote-mobile",
+        "main": "apps/hello-remote/src/main-mobile.tsx",
+        "tsConfig": "apps/hello-remote/tsconfig.app.json",
+        "rspackConfig": "apps/hello-remote/repack.config.js",
+        "assets": []
+      },
+      "configurations": {
+        "development": {
+          "mode": "development"
+        },
+        "production": {
+          "mode": "production"
+        }
+      }
+    },
+    "serve:mobile": {
+      "executor": "@nx/rspack:dev-server",
+      "options": {
+        "buildTarget": "hello-remote:build:mobile",
+        "port": 9004
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "hello-remote:build:mobile:development"
+        },
+        "production": {
+          "buildTarget": "hello-remote:build:mobile:production"
+        }
+      }
     }
   }
 }

@@ -1,6 +1,7 @@
 const { NxAppRspackPlugin } = require('@nx/rspack/app-plugin');
 const { NxReactRspackPlugin } = require('@nx/rspack/react-plugin');
 const { ModuleFederationPlugin } = require('@rspack/core').container;
+const { NormalModuleReplacementPlugin, IgnorePlugin } = require('@rspack/core');
 const { join } = require('path');
 
 module.exports = {
@@ -12,9 +13,22 @@ module.exports = {
   },
   devServer: {
     port: 9003,
+    host: '0.0.0.0', // Listen on all interfaces so Android emulator can access via 10.0.2.2
     headers: {
       'Access-Control-Allow-Origin': '*',
     },
+    allowedHosts: 'all', // Allow connections from any host (needed for Android emulator)
+    // Disable HMR for React Native compatibility
+    // HMR code references webpack Logger which doesn't exist in RN
+    hot: false,
+    liveReload: false,
+    // Keep client enabled but disable HMR features
+    // client: false breaks the dev server's ability to serve files
+    // Instead, we'll use plugins to exclude HMR code from the bundle
+  },
+  // Exclude HMR-related code from bundle
+  optimization: {
+    minimize: false, // Keep readable for debugging, but production mode excludes HMR
   },
   plugins: [
     new NxAppRspackPlugin({
@@ -26,7 +40,38 @@ module.exports = {
       outputHashing: process.env['NODE_ENV'] === 'production' ? 'all' : 'none',
       optimization: process.env['NODE_ENV'] === 'production',
     }),
-    new NxReactRspackPlugin(),
+    new NxReactRspackPlugin({
+      // Disable React Refresh for remoteEntry.js to avoid Logger dependencies
+      // React Refresh pulls in HMR code that references Logger
+      refresh: false,
+    }),
+    // Exclude dev-server client and HMR code from remoteEntry.js for React Native compatibility
+    // Use IgnorePlugin to completely exclude these modules
+    new IgnorePlugin({
+      resourceRegExp: /@rspack\/dev-server\/client/,
+    }),
+    new IgnorePlugin({
+      resourceRegExp: /@rspack\/core\/hot/,
+    }),
+    // Also use NormalModuleReplacementPlugin as fallback
+    new NormalModuleReplacementPlugin(
+      /@rspack\/dev-server\/client/,
+      require.resolve('./src/dev-server-client-mock.js')
+    ),
+    new NormalModuleReplacementPlugin(
+      /@rspack\/core\/hot/,
+      require.resolve('./src/hot-mock.js')
+    ),
+    // Replace webpack Logger modules that HMR code depends on
+    // Use multiple patterns to catch all variations
+    new NormalModuleReplacementPlugin(
+      /webpack[\\/]lib[\\/]logging[\\/]Logger\.js$/,
+      require.resolve('./src/logger-mock.js')
+    ),
+    new NormalModuleReplacementPlugin(
+      /webpack[\\/]lib[\\/]logging[\\/]createConsoleLogger\.js$/,
+      require.resolve('./src/logger-mock.js')
+    ),
     new ModuleFederationPlugin({
       name: 'hello_remote',
       filename: 'remoteEntry.js',

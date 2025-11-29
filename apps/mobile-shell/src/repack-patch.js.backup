@@ -1,0 +1,1740 @@
+// Workaround: Create a mock NativeScriptManager module
+// This file will be aliased in webpack config to replace the real NativeScriptManager
+// when the TurboModule isn't available
+
+const { TurboModuleRegistry, Platform } = require('react-native');
+
+// Try to get the real module first
+let realModule = TurboModuleRegistry.get('ScriptManager');
+
+// Helper function to get the correct URL for a remote
+// Handles platform-specific URL adjustments (Android emulator needs 10.0.2.2)
+function getRemoteUrl(scriptId) {
+  try {
+    // Try to load the remotes config
+    const remotes = require('./config/remotes').remotes;
+    if (remotes && remotes[scriptId] && remotes[scriptId].entry) {
+      let url = remotes[scriptId].entry;
+      
+      // For Android emulator, replace localhost with 10.0.2.2
+      // 10.0.2.2 is the special IP that Android emulator uses to access host machine's localhost
+      if (Platform.OS === 'android' && url.includes('localhost')) {
+        url = url.replace('localhost', '10.0.2.2');
+        console.log('[Mock ScriptManager] Android detected, using 10.0.2.2 instead of localhost');
+      }
+      
+      return url;
+    }
+  } catch (e) {
+    // Config might not be available yet, fall through to hardcoded map
+    console.warn('[Mock ScriptManager] Could not load remotes config:', e.message);
+  }
+  
+  // Fallback to hardcoded map
+  // Use port 9004 for Re.Pack-built mobile remote entry
+  const remoteUrlMap = {
+    'hello_remote': 'http://localhost:9004/remoteEntry.js',
+  };
+  
+  let url = remoteUrlMap[scriptId];
+  
+  // For Android emulator, replace localhost with 10.0.2.2
+  if (Platform.OS === 'android' && url && url.includes('localhost')) {
+    url = url.replace('localhost', '10.0.2.2');
+    console.log('[Mock ScriptManager] Android detected, using 10.0.2.2 instead of localhost');
+  }
+  
+  return url;
+}
+
+// If not found, create a mock that satisfies the TurboModule interface
+// The mock needs to be a proper object with all expected properties AND a prototype
+// Module Federation checks for prototype, so we need to ensure it exists
+function MockScriptManager() {
+  // This constructor ensures the mock has a proper prototype chain
+}
+
+// Add methods to the prototype to satisfy Module Federation's prototype checks
+// The actual signature is: loadScript(scriptId, caller, context, entry)
+// where entry is the URL string
+MockScriptManager.prototype.loadScript = async function(scriptId, caller, context, entry) {
+  // For Module Federation, we need to actually load the script
+  // Since we don't have the native module, we'll use fetch + eval as a fallback
+  // Try multiple ways to extract the URL
+  let url = entry;
+  if (!url && context) {
+    // Check locator.url first (Module Federation v2 uses this)
+    url = context.locator?.url || context.url || context.referenceUrl || context.entry;
+  }
+  
+  // If entry is an object, try to extract URL from it
+  if (url && typeof url === 'object') {
+    url = url.url || url.entry || url.href;
+  }
+  
+  // If still no URL, try to construct it from the scriptId (remote name)
+  if (!url && scriptId) {
+    url = getRemoteUrl(scriptId);
+  }
+  
+  // If we have a URL string, adjust it for Android if needed
+  // This must happen AFTER we've extracted the URL from all possible sources
+  if (url && typeof url === 'string' && Platform.OS === 'android' && url.includes('localhost')) {
+    url = url.replace('localhost', '10.0.2.2');
+    console.log('[Mock ScriptManager] Adjusted URL for Android: ' + url);
+  }
+  
+  if (url && typeof url === 'string') {
+    // Declare these at function scope so they're available in finally block
+    let originalWindow;
+    let originalSelf;
+    let originalHotEmitter;
+    let originalInteropRequireDefault;
+    
+    // Define Logger module paths that need to be mocked - at function scope for all nested blocks
+    const loggerModuleIds = [
+      "./node_modules/webpack/lib/logging/Logger.js",
+      "./node_modules/webpack/lib/logging/createConsoleLogger.js",
+      "../../node_modules/webpack/lib/logging/Logger.js",
+      "../../../node_modules/webpack/lib/logging/Logger.js",
+      "../../node_modules/@rspack/core/hot/log.js",
+      "../../../node_modules/@rspack/core/hot/log.js",
+      "../../node_modules/webpack-dev-server/client/modules/logger/index.js",
+    ];
+    
+    // Create a comprehensive mock Logger that satisfies all webpack Logger requirements
+    // Define at function scope so it's accessible in all nested blocks
+    const mockLogger = {
+      error: () => {},
+      warn: () => {},
+      info: () => {},
+      log: () => {},
+      debug: () => {},
+      group: () => {},
+      groupCollapsed: () => {},
+      groupEnd: () => {},
+      time: () => {},
+      timeEnd: () => {},
+      profile: () => {},
+      profileEnd: () => {},
+      clear: () => {},
+      status: () => {},
+    };
+    
+    try {
+      console.log('[Mock ScriptManager] Loading: ' + scriptId + ' from ' + url);
+      console.log('[Mock ScriptManager] Platform: ' + Platform.OS);
+      
+      // Add timeout and better error handling for Android
+      let response;
+      let timeoutId;
+      try {
+        // Use AbortController if available (React Native 0.60+)
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        if (controller) {
+          timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        }
+        
+        const fetchOptions = {
+          method: 'GET',
+          headers: {
+            'Accept': '*/*',
+          },
+        };
+        
+        if (controller) {
+          fetchOptions.signal = controller.signal;
+        }
+        
+        response = await fetch(url, fetchOptions);
+        
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      } catch (fetchError) {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        
+        // On Android, if 10.0.2.2 fails, try localhost (in case adb reverse is set up)
+        if (Platform.OS === 'android' && url.includes('10.0.2.2')) {
+          const localhostUrl = url.replace('10.0.2.2', 'localhost');
+          console.log('[Mock ScriptManager] 10.0.2.2 failed, trying localhost (adb reverse may be set up): ' + localhostUrl);
+          
+          let timeoutId2;
+          try {
+            const controller2 = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            if (controller2) {
+              timeoutId2 = setTimeout(() => controller2.abort(), 10000);
+            }
+            
+            const fetchOptions2 = {
+              method: 'GET',
+              headers: {
+                'Accept': '*/*',
+              },
+            };
+            
+            if (controller2) {
+              fetchOptions2.signal = controller2.signal;
+            }
+            
+            response = await fetch(localhostUrl, fetchOptions2);
+            
+            if (timeoutId2) {
+              clearTimeout(timeoutId2);
+            }
+            
+            console.log('[Mock ScriptManager] Successfully loaded from localhost (adb reverse is active)');
+            // Continue with the response
+          } catch (fallbackError) {
+            if (timeoutId2) {
+              clearTimeout(timeoutId2);
+            }
+            
+            // Both attempts failed
+            const helpfulMsg = `Network request failed with both 10.0.2.2 and localhost.\n` +
+              `Make sure:\n` +
+              `1. The hello-remote dev server is running (npm run hello-remote:serve)\n` +
+              `2. For Android emulator, run: adb reverse tcp:9003 tcp:9003\n` +
+              `Original error: ${fetchError.message || fetchError}\n` +
+              `Fallback error: ${fallbackError.message || fallbackError}`;
+            console.error('[Mock ScriptManager] ' + helpfulMsg);
+            throw new Error(helpfulMsg);
+          }
+        } else {
+          // Not Android or not using 10.0.2.2, just throw the original error
+          if (fetchError && fetchError.name === 'AbortError') {
+            throw new Error(`Request timeout after 10s. Make sure the dev server is running and accessible.`);
+          }
+          throw fetchError;
+        }
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const script = await response.text();
+      
+      // Set up minimal webpack-like globals for the remote entry script
+      // Remote entries built with Rspack expect these globals
+      originalWindow = globalThis.window;
+      originalSelf = globalThis.self;
+      
+      // Create a minimal window/self object for webpack compatibility
+      if (!globalThis.window) {
+        globalThis.window = globalThis;
+      }
+      if (!globalThis.self) {
+        globalThis.self = globalThis;
+      }
+      
+      // Set up a minimal console if needed (React Native should have this)
+      if (!globalThis.console) {
+        globalThis.console = console;
+      }
+      
+      // Mock Babel helpers that the script might use
+      // _interop_require_default is a Babel helper for handling default exports
+      // Set this up EARLY before any script execution
+      originalInteropRequireDefault = globalThis._interop_require_default;
+      const interopHelper = {
+        _: function(obj) {
+          return obj && obj.__esModule ? obj : { default: obj };
+        }
+      };
+      try {
+        Object.defineProperty(globalThis, '_interop_require_default', {
+          value: interopHelper,
+          writable: false,
+          configurable: false,
+          enumerable: true
+        });
+        console.log('[Mock ScriptManager] ✓ Set up _interop_require_default mock');
+      } catch (e) {
+        // If already defined, just ensure _ method exists
+        if (globalThis._interop_require_default) {
+          if (typeof globalThis._interop_require_default._ !== 'function') {
+            globalThis._interop_require_default._ = interopHelper._;
+          }
+        } else {
+          globalThis._interop_require_default = interopHelper;
+        }
+        console.log('[Mock ScriptManager] ✓ Ensured _interop_require_default._ exists');
+      }
+      
+      // Mock hotEmitter early - it might be accessed during script initialization
+      // Set this up EARLY before any script execution
+      originalHotEmitter = globalThis.hotEmitter;
+      const hotEmitterMock = {
+        on: function(event, callback) {
+          console.log('[Mock ScriptManager] hotEmitter.on called:', event);
+          // No-op: HMR is not supported in React Native
+        },
+        emit: function(event, data) {
+          console.log('[Mock ScriptManager] hotEmitter.emit called:', event);
+          // No-op: HMR is not supported in React Native
+        },
+        removeListener: function(event, callback) {
+          // No-op
+        },
+        removeAllListeners: function(event) {
+          // No-op
+        },
+      };
+      try {
+        Object.defineProperty(globalThis, 'hotEmitter', {
+          value: hotEmitterMock,
+          writable: false,
+          configurable: false,
+          enumerable: true
+        });
+        console.log('[Mock ScriptManager] ✓ Set up hotEmitter mock');
+      } catch (e) {
+        // If already defined, ensure methods exist
+        if (globalThis.hotEmitter) {
+          if (typeof globalThis.hotEmitter.on !== 'function') {
+            globalThis.hotEmitter.on = hotEmitterMock.on;
+          }
+          if (typeof globalThis.hotEmitter.emit !== 'function') {
+            globalThis.hotEmitter.emit = hotEmitterMock.emit;
+          }
+          if (typeof globalThis.hotEmitter.removeListener !== 'function') {
+            globalThis.hotEmitter.removeListener = hotEmitterMock.removeListener;
+          }
+          if (typeof globalThis.hotEmitter.removeAllListeners !== 'function') {
+            globalThis.hotEmitter.removeAllListeners = hotEmitterMock.removeAllListeners;
+          }
+        } else {
+          globalThis.hotEmitter = hotEmitterMock;
+        }
+        console.log('[Mock ScriptManager] ✓ Ensured hotEmitter methods exist');
+      }
+      
+      // Mock webpack Module and ModuleFederation classes that remoteEntry.js might reference
+      // Pattern: webpack.Module or __webpack_require__.Module
+      if (!globalThis.webpack) {
+        globalThis.webpack = {};
+      }
+      if (!globalThis.webpack.Module) {
+        globalThis.webpack.Module = function Module() {};
+      }
+      if (!globalThis.webpack.ModuleFederation) {
+        globalThis.webpack.ModuleFederation = function ModuleFederation(options) {
+          this.options = options || {};
+        };
+      }
+      
+      // Also mock Module and ModuleFederation on globalThis directly
+      if (!globalThis.Module) {
+        globalThis.Module = globalThis.webpack.Module;
+      }
+      if (!globalThis.ModuleFederation) {
+        globalThis.ModuleFederation = globalThis.webpack.ModuleFederation;
+      }
+      
+      // Mock __webpack_require__.federation with instance.registerShared method
+      // This will be set up when __webpack_require__ is created, but we can pre-create it here
+      // The script will create its own __webpack_require__, but we'll ensure federation exists
+      
+      // The remoteEntry.js is a webpack bundle that defines its own __webpack_modules__ and __webpack_require__
+      // We need to intercept and mock Logger access before the script runs
+      // The script accesses Logger through __webpack_require__, so we need to set up a proper mock
+      // (mockLogger is now defined at function scope above)
+      
+      // Pre-define __webpack_modules__ as empty - the script will populate it
+      if (!globalThis.__webpack_modules__) {
+        globalThis.__webpack_modules__ = {};
+      }
+      
+      // Create a __webpack_require__ that handles Logger and other webpack modules
+      // The script will define its own __webpack_require__, but we need this for early access
+      const webpackModuleCache = {};
+      
+      // Create a proxy for __webpack_require__ that intercepts Logger access
+      const createWebpackRequire = () => {
+        const requireFn = function(moduleId) {
+          // Check if script has defined its own modules
+          if (globalThis.__webpack_modules__ && globalThis.__webpack_modules__[moduleId]) {
+            try {
+              const module = { exports: {} };
+              const moduleFn = globalThis.__webpack_modules__[moduleId];
+              moduleFn(module, module.exports, requireFn);
+              return module.exports;
+            } catch (e) {
+              // If module execution fails, return a mock
+              console.warn('[Mock ScriptManager] Module ' + moduleId + ' execution failed: ' + e.message);
+            }
+          }
+          
+          // Return cached mock if available
+          if (webpackModuleCache[moduleId]) {
+            return webpackModuleCache[moduleId];
+          }
+          
+          // Provide mocks for common webpack modules
+          let mockModule = {};
+          
+          // Handle @swc/helpers modules that the script expects
+          if (moduleId.includes('_interop_require_default') || moduleId.includes('interop_require_default')) {
+            mockModule = {
+              _: function(obj) {
+                return obj && obj.__esModule ? obj : { default: obj };
+              }
+            };
+            console.log('[Mock ScriptManager] Providing _interop_require_default helper for: ' + moduleId);
+          } else if (moduleId.includes('hot') && (moduleId.includes('Emitter') || moduleId.includes('emitter'))) {
+            // Handle hotEmitter module requests
+            mockModule = {
+              on: function(event, callback) {
+                console.log('[Mock ScriptManager] hotEmitter.on called:', event);
+              },
+              emit: function(event, data) {
+                console.log('[Mock ScriptManager] hotEmitter.emit called:', event);
+              },
+              removeListener: function(event, callback) {},
+              removeAllListeners: function(event) {},
+            };
+            console.log('[Mock ScriptManager] Providing hotEmitter mock for: ' + moduleId);
+          } else if (moduleId.includes('Logger') || moduleId.includes('logging')) {
+            mockModule = mockLogger;
+          } else if (moduleId.includes('webpack-dev-server') || moduleId.includes('dev-server')) {
+            mockModule = { default: {}, log: mockLogger };
+          } else if (moduleId.includes('hot') || moduleId.includes('HMR')) {
+            mockModule = { 
+              default: {}, 
+              check: () => Promise.resolve([]), 
+              apply: () => Promise.resolve([]),
+              status: () => 'idle',
+            };
+          } else {
+            mockModule = { default: {} };
+          }
+          
+          webpackModuleCache[moduleId] = mockModule;
+          return mockModule;
+        };
+        
+        requireFn.cache = webpackModuleCache;
+        return requireFn;
+      };
+      
+      // Set up initial __webpack_require__ - script will overwrite but this handles early access
+      if (!globalThis.__webpack_require__) {
+        const initialRequire = createWebpackRequire();
+        // Add webpack helper methods that scripts expect
+        initialRequire.d = function(exports, definition) {
+          for (var key in definition) {
+            if (Object.prototype.hasOwnProperty.call(definition, key) && !Object.prototype.hasOwnProperty.call(exports, key)) {
+              Object.defineProperty(exports, key, {
+                enumerable: true,
+                get: definition[key]
+              });
+            }
+          }
+        };
+        initialRequire.r = function(exports) {
+          if (typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+            Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+          }
+          Object.defineProperty(exports, '__esModule', { value: true });
+        };
+        initialRequire.n = function(module) {
+          var getter = module && module.__esModule
+            ? function getDefault() { return module['default']; }
+            : function getModuleExports() { return module; };
+          initialRequire.d(getter, { a: getter });
+          return getter;
+        };
+        initialRequire.o = function(object, property) {
+          return Object.prototype.hasOwnProperty.call(object, property);
+        };
+        globalThis.__webpack_require__ = initialRequire;
+      }
+      
+      try {
+        // Use a Proxy to intercept property access on globalThis during script execution
+        // This catches "Property 'Logger' doesn't exist" errors as they happen
+        const originalGlobalThis = globalThis;
+        let scriptExecuted = false;
+        
+        // Create a proxy that intercepts property access
+        const globalProxy = new Proxy(globalThis, {
+          get(target, prop) {
+            // Allow normal property access
+            if (prop in target) {
+              return target[prop];
+            }
+            
+            // If script hasn't executed yet and we're accessing webpack-related properties,
+            // return our mocks
+            if (!scriptExecuted) {
+              if (prop === '__webpack_modules__' || prop === '__webpack_require__') {
+                return target[prop];
+              }
+            }
+            
+            // For undefined properties that might be Logger-related, return a mock
+            if (typeof prop === 'string' && (prop.includes('Logger') || prop.includes('logger'))) {
+              return mockLogger;
+            }
+            
+            return undefined;
+          },
+          set(target, prop, value) {
+            // Allow normal property setting
+            target[prop] = value;
+            
+            // Track when script defines its modules
+            if (prop === '__webpack_modules__' || prop === '__webpack_require__') {
+              scriptExecuted = true;
+            }
+            
+            return true;
+          }
+        });
+        
+        // Execute script DIRECTLY without any wrapping or modifications
+        // All wrapping was causing syntax errors - the script must execute as-is
+        console.log('[Mock ScriptManager] Executing script directly without any wrapping');
+          
+          // CRITICAL: Wait for host federation runtime to be ready before script execution
+          // Module Federation runtime needs to be fully initialized before remotes can register
+          async function waitForFederationRuntime(maxWaitMs = 10000) {
+            const startTime = Date.now();
+            let lastStatus = '';
+            
+            while (Date.now() - startTime < maxWaitMs) {
+              // First, wait for __webpack_require__ to exist (host bundle must load first)
+              if (!globalThis.__webpack_require__) {
+                if (lastStatus !== 'waiting_for_require') {
+                  lastStatus = 'waiting_for_require';
+                  console.log('[Mock ScriptManager] Waiting for __webpack_require__ (host bundle loading)...');
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+                continue;
+              }
+              
+              // Then wait for federation to exist
+              if (!globalThis.__webpack_require__.federation) {
+                if (lastStatus !== 'waiting_for_federation') {
+                  lastStatus = 'waiting_for_federation';
+                  console.log('[Mock ScriptManager] Waiting for __webpack_require__.federation...');
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+                continue;
+              }
+              
+              // Finally, wait for instance to be ready
+              if (!globalThis.__webpack_require__.federation.instance) {
+                if (lastStatus !== 'waiting_for_instance') {
+                  lastStatus = 'waiting_for_instance';
+                  console.log('[Mock ScriptManager] Waiting for federation.instance...');
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+                continue;
+              }
+              
+              const instance = globalThis.__webpack_require__.federation.instance;
+              // Check if instance is ready (has required methods)
+              if (instance.set && instance.get) {
+                console.log('[Mock ScriptManager] ✓ Federation runtime is ready');
+                return globalThis.__webpack_require__.federation;
+              } else {
+                if (lastStatus !== 'waiting_for_methods') {
+                  lastStatus = 'waiting_for_methods';
+                  console.log('[Mock ScriptManager] Waiting for federation.instance methods (set/get)...');
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+                continue;
+              }
+            }
+            
+            // Timeout - check what we have
+            if (globalThis.__webpack_require__ && globalThis.__webpack_require__.federation) {
+              console.warn('[Mock ScriptManager] ⚠ Timeout waiting for runtime, but federation exists. Proceeding with caution.');
+              return globalThis.__webpack_require__.federation;
+            }
+            
+            return null;
+          }
+          
+          // Wait for runtime to be ready
+          console.log('[Mock ScriptManager] Waiting for Module Federation runtime to be ready...');
+          const hostFederation = await waitForFederationRuntime();
+          
+          if (!hostFederation || !hostFederation.instance) {
+            // Re.Pack's ModuleFederationPluginV2 might not initialize federation automatically
+            // Create a minimal federation runtime if it doesn't exist
+            if (globalThis.__webpack_require__ && !globalThis.__webpack_require__.federation) {
+              console.warn('[Mock ScriptManager] ⚠ Federation not found, creating minimal runtime...');
+              
+              // Create a minimal federation instance
+              // Use plain object instead of Map for React Native compatibility
+              const containers = {};
+              const federationInstance = {
+                containers: containers,
+                get: function(key) {
+                  return containers[key];
+                },
+                set: function(key, container) {
+                  containers[key] = container;
+                  // Also store in globalThis for easy access
+                  globalThis[key] = container;
+                  if (key === scriptId) {
+                    globalThis.hello_remote = container;
+                  }
+                  console.log('[Mock ScriptManager] Container registered: ' + key);
+                  return container;
+                },
+                has: function(key) {
+                  return key in containers;
+                },
+              };
+              
+              // Create federation object
+              const federation = {
+                instance: federationInstance,
+              };
+              
+              // Attach to __webpack_require__
+              globalThis.__webpack_require__.federation = federation;
+              hostFederation = federation;
+              
+              console.log('[Mock ScriptManager] ✓ Created minimal federation runtime');
+            } else {
+              const errorMsg = '[Mock ScriptManager] ✗ Module Federation runtime is not ready! Cannot load remote. ' +
+                'Make sure the host bundle has loaded and Module Federation is initialized.';
+              console.error(errorMsg);
+              // Try to find it in other locations for debugging
+              if (globalThis.__webpack_require__) {
+                console.log('[Mock ScriptManager] __webpack_require__ exists but no federation. Keys: ' + Object.keys(globalThis.__webpack_require__).slice(0, 10).join(', '));
+              } else {
+                console.warn('[Mock ScriptManager] ⚠ __webpack_require__ does not exist in globalThis!');
+              }
+              throw new Error('Module Federation runtime not ready');
+            }
+          }
+          
+          globalThis.__hostFederation__ = hostFederation;
+          console.log('[Mock ScriptManager] ✓ Host federation runtime is ready, proceeding with script execution');
+          
+          // CRITICAL: Wrap instance.set() BEFORE script execution to capture container registration
+          // The script will call federation.instance.set() to register itself, and we need to capture that
+          if (hostFederation && hostFederation.instance && hostFederation.instance.set) {
+            const originalSet = hostFederation.instance.set;
+            hostFederation.instance.set = function(key, container) {
+              console.log('[Mock ScriptManager] federation.instance.set() called with key: ' + key);
+              const result = originalSet.apply(this, arguments);
+              if (container && typeof container.get === 'function') {
+                globalThis[key] = container;
+                if (key === 'hello_remote') {
+                  globalThis.hello_remote = container;
+                }
+                console.log('[Mock ScriptManager] ✓ Container registered and stored: ' + key);
+              } else {
+                console.log('[Mock ScriptManager] Container set but doesn\'t have get method: ' + typeof container);
+              }
+              return result;
+            };
+            console.log('[Mock ScriptManager] ✓ Wrapped federation.instance.set() to capture container registration');
+          }
+          
+          // Intercept __webpack_require__ assignment to inject host federation
+          // The remote script will create its own __webpack_require__, but we need it to use the host's federation
+          const originalDefineProperty = Object.defineProperty;
+          const originalSetProperty = (obj, prop, value) => {
+            obj[prop] = value;
+          };
+          
+          // Wrap Object.defineProperty to intercept __webpack_require__ creation
+          Object.defineProperty = function(obj, prop, descriptor) {
+            if (prop === '__webpack_require__' && obj === globalThis && hostFederation) {
+              // Script is defining __webpack_require__, inject host federation and patch for @swc/helpers
+              const originalRequire = descriptor.value || descriptor.get?.();
+              if (typeof originalRequire === 'function') {
+                // Create a patched version that handles @swc/helpers modules
+                const patchedRequire = function(moduleId) {
+                  // Handle @swc/helpers modules that the script expects
+                  if (moduleId.includes('_interop_require_default') || moduleId.includes('interop_require_default')) {
+                    return {
+                      _: function(obj) {
+                        return obj && obj.__esModule ? obj : { default: obj };
+                      }
+                    };
+                  }
+                  if (moduleId.includes('hot') && (moduleId.includes('Emitter') || moduleId.includes('emitter'))) {
+                    return {
+                      on: function(event, callback) {},
+                      emit: function(event, data) {},
+                      removeListener: function(event, callback) {},
+                      removeAllListeners: function(event) {},
+                    };
+                  }
+                  // Fall back to original require
+                  return originalRequire.apply(this, arguments);
+                };
+                // Copy all properties from original require
+                Object.keys(originalRequire).forEach(key => {
+                  if (key !== 'prototype' && key !== 'length' && key !== 'name') {
+                    patchedRequire[key] = originalRequire[key];
+                  }
+                });
+                
+                // Ensure the patched require has the host's federation
+                if (!patchedRequire.federation) {
+                  patchedRequire.federation = hostFederation;
+                } else if (patchedRequire.federation.instance !== hostFederation.instance) {
+                  patchedRequire.federation.instance = hostFederation.instance;
+                }
+                
+                descriptor.value = patchedRequire;
+                console.log('[Mock ScriptManager] ✓ Injected host federation and patched @swc/helpers support into script\'s __webpack_require__ during definition');
+              }
+            }
+            return originalDefineProperty.call(this, obj, prop, descriptor);
+          };
+          
+          // Also intercept direct property assignment
+          const originalSet = Object.getOwnPropertyDescriptor(globalThis, '__webpack_require__')?.set;
+          if (originalSet) {
+            Object.defineProperty(globalThis, '__webpack_require__', {
+              set: function(value) {
+                if (typeof value === 'function' && hostFederation) {
+                  if (!value.federation) {
+                    value.federation = hostFederation;
+                  } else if (value.federation.instance !== hostFederation.instance) {
+                    value.federation.instance = hostFederation.instance;
+                  }
+                  console.log('[Mock ScriptManager] ✓ Injected host federation into script\'s __webpack_require__ during assignment');
+                }
+                originalSet.call(this, value);
+              },
+              get: Object.getOwnPropertyDescriptor(globalThis, '__webpack_require__')?.get,
+              configurable: true,
+            });
+          }
+          
+          // Execute script directly with minimal error handling
+          const executeScriptDirectly = (scriptToExecute) => {
+            try {
+              console.log('[Mock ScriptManager] Executing script directly...');
+              
+              // CRITICAL: Ensure all mocks are available and properly set up before script execution
+              // The script might access these immediately, so they must be ready
+              // Use Object.defineProperty to make them non-configurable so script can't overwrite them
+              
+              // Ensure _interop_require_default exists and has the _ method
+              const interopHelper = {
+                _: function(obj) {
+                  return obj && obj.__esModule ? obj : { default: obj };
+                }
+              };
+              try {
+                Object.defineProperty(globalThis, '_interop_require_default', {
+                  value: interopHelper,
+                  writable: false,
+                  configurable: false,
+                  enumerable: true
+                });
+              } catch (e) {
+                // If already defined, just ensure _ method exists
+                if (globalThis._interop_require_default && typeof globalThis._interop_require_default._ !== 'function') {
+                  globalThis._interop_require_default._ = interopHelper._;
+                } else if (!globalThis._interop_require_default) {
+                  globalThis._interop_require_default = interopHelper;
+                }
+              }
+              
+              // Ensure hotEmitter exists and has all required methods
+              const hotEmitterMock = {
+                on: function(event, callback) {
+                  console.log('[Mock ScriptManager] hotEmitter.on called:', event);
+                  // No-op: HMR is not supported in React Native
+                },
+                emit: function(event, data) {
+                  console.log('[Mock ScriptManager] hotEmitter.emit called:', event);
+                  // No-op: HMR is not supported in React Native
+                },
+                removeListener: function(event, callback) {
+                  // No-op
+                },
+                removeAllListeners: function(event) {
+                  // No-op
+                },
+              };
+              try {
+                Object.defineProperty(globalThis, 'hotEmitter', {
+                  value: hotEmitterMock,
+                  writable: false,
+                  configurable: false,
+                  enumerable: true
+                });
+              } catch (e) {
+                // If already defined, ensure methods exist
+                if (globalThis.hotEmitter) {
+                  if (typeof globalThis.hotEmitter.on !== 'function') {
+                    globalThis.hotEmitter.on = hotEmitterMock.on;
+                  }
+                  if (typeof globalThis.hotEmitter.emit !== 'function') {
+                    globalThis.hotEmitter.emit = hotEmitterMock.emit;
+                  }
+                  if (typeof globalThis.hotEmitter.removeListener !== 'function') {
+                    globalThis.hotEmitter.removeListener = hotEmitterMock.removeListener;
+                  }
+                  if (typeof globalThis.hotEmitter.removeAllListeners !== 'function') {
+                    globalThis.hotEmitter.removeAllListeners = hotEmitterMock.removeAllListeners;
+                  }
+                } else {
+                  globalThis.hotEmitter = hotEmitterMock;
+                }
+              }
+              
+              // Mock module and exports for CommonJS compatibility
+              // Remote entries may reference module.exports or exports
+              const originalModule = globalThis.module;
+              const originalExports = globalThis.exports;
+              
+              if (!globalThis.module) {
+                globalThis.module = { exports: {} };
+              }
+              if (!globalThis.exports) {
+                globalThis.exports = globalThis.module.exports;
+              }
+              
+              // Verify mocks are available before execution and ensure they're in the eval scope
+              // The script might try to access these immediately, so we need them ready
+              const interopHelperFn = function(obj) {
+                return obj && obj.__esModule ? obj : { default: obj };
+              };
+              
+              if (!globalThis._interop_require_default || typeof globalThis._interop_require_default._ !== 'function') {
+                console.warn('[Mock ScriptManager] ⚠ _interop_require_default._ is missing before script execution, re-setting...');
+                globalThis._interop_require_default = { _: interopHelperFn };
+              } else {
+                // Ensure the _ method exists even if object exists
+                globalThis._interop_require_default._ = interopHelperFn;
+              }
+              
+              const hotEmitterOnFn = function(event, callback) {
+                console.log('[Mock ScriptManager] hotEmitter.on called:', event);
+              };
+              const hotEmitterEmitFn = function(event, data) {
+                console.log('[Mock ScriptManager] hotEmitter.emit called:', event);
+              };
+              
+              if (!globalThis.hotEmitter || typeof globalThis.hotEmitter.on !== 'function') {
+                console.warn('[Mock ScriptManager] ⚠ hotEmitter.on is missing before script execution, re-setting...');
+                globalThis.hotEmitter = {
+                  on: hotEmitterOnFn,
+                  emit: hotEmitterEmitFn,
+                  removeListener: function(event, callback) {},
+                  removeAllListeners: function(event) {},
+                };
+              } else {
+                // Ensure methods exist even if object exists
+                globalThis.hotEmitter.on = hotEmitterOnFn;
+                globalThis.hotEmitter.emit = hotEmitterEmitFn;
+                if (typeof globalThis.hotEmitter.removeListener !== 'function') {
+                  globalThis.hotEmitter.removeListener = function(event, callback) {};
+                }
+                if (typeof globalThis.hotEmitter.removeAllListeners !== 'function') {
+                  globalThis.hotEmitter.removeAllListeners = function(event) {};
+                }
+              }
+              
+              // Prepend mocks directly to script content so they're available from the first line
+              // This ensures they're available even if script tries to access them immediately
+              const scriptWithMocks = `
+                // Injected mocks - must be at the very top before any script code
+                (function() {
+                  if (typeof globalThis._interop_require_default === 'undefined' || typeof globalThis._interop_require_default._ !== 'function') {
+                    globalThis._interop_require_default = { _: function(obj) { return obj && obj.__esModule ? obj : { default: obj }; } };
+                  }
+                  if (typeof globalThis.hotEmitter === 'undefined' || typeof globalThis.hotEmitter.on !== 'function') {
+                    globalThis.hotEmitter = {
+                      on: function(event, callback) {},
+                      emit: function(event, data) {},
+                      removeListener: function(event, callback) {},
+                      removeAllListeners: function(event) {}
+                    };
+                  }
+                })();
+                
+                ${scriptToExecute}
+              `;
+              
+              try {
+                eval(scriptWithMocks);
+              } catch (evalError) {
+                // If prepended script fails, try direct execution as fallback
+                console.warn('[Mock ScriptManager] Script with prepended mocks failed, trying direct execution:', evalError.message);
+                try {
+                  eval(scriptToExecute);
+                } catch (directError) {
+                  throw directError;
+                }
+              } finally {
+                // Restore original values if they existed
+                if (originalModule === undefined) {
+                  delete globalThis.module;
+                } else {
+                  globalThis.module = originalModule;
+                }
+                if (originalExports === undefined) {
+                  delete globalThis.exports;
+                } else {
+                  globalThis.exports = originalExports;
+                }
+                // Note: hotEmitter cleanup is handled at the outer scope level
+              }
+              
+              console.log('[Mock ScriptManager] Script executed successfully');
+              
+              // After successful execution, check for container in all possible locations
+              console.log('[Mock ScriptManager] Checking for container after execution...');
+              
+              // Check globalThis[scriptId]
+              if (globalThis[scriptId]) {
+                console.log('[Mock ScriptManager] Found container in globalThis[' + scriptId + ']');
+                if (scriptId === 'hello_remote') {
+                  globalThis.hello_remote = globalThis[scriptId];
+                }
+              }
+              
+              // Check __webpack_require__.federation.instance
+              if (globalThis.__webpack_require__) {
+                console.log('[Mock ScriptManager] __webpack_require__ exists');
+                if (globalThis.__webpack_require__.federation) {
+                  console.log('[Mock ScriptManager] __webpack_require__.federation exists');
+                  if (globalThis.__webpack_require__.federation.instance) {
+                    const instance = globalThis.__webpack_require__.federation.instance;
+                    console.log('[Mock ScriptManager] federation.instance exists, checking for container...');
+                    console.log('[Mock ScriptManager] federation.instance methods: ' + Object.keys(instance).join(', '));
+                    if (instance.get && typeof instance.get === 'function') {
+                      try {
+                        const containerPromise = instance.get(scriptId);
+                        if (containerPromise && typeof containerPromise.then === 'function') {
+                          // Async - await it
+                          console.log('[Mock ScriptManager] Container available via federation.instance.get (async), awaiting...');
+                          containerPromise.then((container) => {
+                            if (container && typeof container.get === 'function') {
+                              globalThis[scriptId] = container;
+                              if (scriptId === 'hello_remote') {
+                                globalThis.hello_remote = container;
+                              }
+                              console.log('[Mock ScriptManager] Container retrieved via federation.instance.get (async)');
+                            } else {
+                              console.log('[Mock ScriptManager] federation.instance.get returned non-container: ' + typeof container);
+                            }
+                          }).catch((e) => {
+                            console.log('[Mock ScriptManager] federation.instance.get failed: ' + e.message);
+                          });
+                        } else if (containerPromise && typeof containerPromise.get === 'function') {
+                          // Sync - store it
+                          globalThis[scriptId] = containerPromise;
+                          if (scriptId === 'hello_remote') {
+                            globalThis.hello_remote = containerPromise;
+                          }
+                          console.log('[Mock ScriptManager] Container retrieved synchronously via federation.instance.get');
+                        } else {
+                          console.log('[Mock ScriptManager] federation.instance.get returned: ' + typeof containerPromise);
+                        }
+                      } catch (e) {
+                        console.log('[Mock ScriptManager] Error accessing federation.instance.get: ' + e.message);
+                      }
+                    } else {
+                      console.log('[Mock ScriptManager] federation.instance.get is not a function');
+                    }
+                  } else {
+                    console.log('[Mock ScriptManager] federation.instance does not exist');
+                  }
+                } else {
+                  console.log('[Mock ScriptManager] __webpack_require__.federation does not exist');
+                  console.log('[Mock ScriptManager] __webpack_require__ keys: ' + Object.keys(globalThis.__webpack_require__).slice(0, 20).join(', '));
+                }
+              }
+              
+              // Check __webpack_require__.cache
+              if (globalThis.__webpack_require__ && globalThis.__webpack_require__.cache) {
+                const cacheKeys = Object.keys(globalThis.__webpack_require__.cache);
+                console.log('[Mock ScriptManager] Checking cache (' + cacheKeys.length + ' entries)...');
+                for (const key of cacheKeys) {
+                  if (key.includes(scriptId) || key.includes('container')) {
+                    const cached = globalThis.__webpack_require__.cache[key];
+                    if (cached && cached.exports && typeof cached.exports.get === 'function') {
+                      globalThis[scriptId] = cached.exports;
+                      if (scriptId === 'hello_remote') {
+                        globalThis.hello_remote = cached.exports;
+                      }
+                      console.log('[Mock ScriptManager] Found container in cache: ' + key);
+                      break;
+                    }
+                  }
+                }
+              }
+              
+              return { success: true };
+            } catch (e) {
+              
+              // If it's a Logger, Module, ModuleFederation, SDK method error, or syntax error, check if container was created anyway
+              // Sometimes the container is created before these errors occur
+              // Syntax errors might occur during module loading but the container might still be usable
+              if (e.message && (
+                e.message.includes('Logger') || 
+                e.message.includes("Property 'Logger' doesn't exist") ||
+                e.message.includes('Module') ||
+                e.message.includes("Property 'Module' doesn't exist") ||
+                e.message.includes('ModuleFederation') ||
+                e.message.includes("Property 'ModuleFederation' doesn't exist") ||
+                e.message.includes('isDebugMode') ||
+                e.message.includes('registerShared') ||
+                e.message.includes('is not a function') ||
+                e.message.includes('SyntaxError') ||
+                e.message.includes('Invalid expression')
+              )) {
+                // Check if container was created despite the error
+                if (globalThis[scriptId]) {
+                  if (scriptId === 'hello_remote') {
+                    globalThis.hello_remote = globalThis[scriptId];
+                  }
+                  console.log('[Mock ScriptManager] Container ' + scriptId + ' created despite error - continuing');
+                  return { success: true, containerCreated: true };
+                }
+                
+                // Log the error but don't fail - script might have partially executed
+                let errorType = 'unknown';
+                if (e.message.includes('SyntaxError') || e.message.includes('Invalid expression')) {
+                  errorType = 'SyntaxError';
+                } else if (e.message.includes('ModuleFederation')) {
+                  errorType = 'ModuleFederation';
+                } else if (e.message.includes('Module')) {
+                  errorType = 'Module';
+                } else if (e.message.includes('Logger')) {
+                  errorType = 'Logger';
+                }
+                console.warn('[Mock ScriptManager] ' + errorType + ' error during execution: ' + e.message);
+                return { success: false, error: e };
+              }
+              throw e;
+            }
+          };
+          
+          // CRITICAL: Store host's federation in globalThis before script execution
+          // The script will create its own __webpack_require__, but we need to ensure it uses the host's federation
+          // Store it in a way that's accessible from within the script
+          if (globalThis.__webpack_require__ && globalThis.__webpack_require__.federation) {
+            globalThis.__hostFederation__ = globalThis.__webpack_require__.federation;
+          }
+          
+          // CRITICAL: Pre-populate Logger modules before script execution
+          // The script will try to access Logger modules, so we need them available
+          if (!globalThis.__webpack_modules__) {
+            globalThis.__webpack_modules__ = {};
+          }
+          loggerModuleIds.forEach(moduleId => {
+            if (!globalThis.__webpack_modules__[moduleId]) {
+              globalThis.__webpack_modules__[moduleId] = function(module) {
+                module.exports = { Logger: mockLogger };
+              };
+            }
+          });
+          
+          // Execute script directly - no wrapping, no modifications
+          try {
+            // Execute script directly - no wrapping, no modifications
+            const result = executeScriptDirectly(script);
+            
+            // After script execution, inject host federation into script's __webpack_require__
+            // This is CRITICAL - the script's __webpack_require__ needs the host's federation.instance
+            // Note: instance.set() is already wrapped before script execution, so we don't need to wrap it again
+            if (globalThis.__webpack_require__ && globalThis.__hostFederation__) {
+              // CRITICAL: Patch the script's __webpack_require__ to handle @swc/helpers modules
+              // The script tries to load _interop_require_default and hotEmitter as modules
+              if (typeof globalThis.__webpack_require__ === 'function') {
+                const originalRequire = globalThis.__webpack_require__;
+                const patchedRequire = function(moduleId) {
+                  // Handle @swc/helpers modules that the script expects
+                  if (moduleId.includes('_interop_require_default') || moduleId.includes('interop_require_default')) {
+                    return {
+                      _: function(obj) {
+                        return obj && obj.__esModule ? obj : { default: obj };
+                      }
+                    };
+                  }
+                  if (moduleId.includes('hot') && (moduleId.includes('Emitter') || moduleId.includes('emitter'))) {
+                    return {
+                      on: function(event, callback) {},
+                      emit: function(event, data) {},
+                      removeListener: function(event, callback) {},
+                      removeAllListeners: function(event) {},
+                    };
+                  }
+                  // Fall back to original require
+                  return originalRequire.apply(this, arguments);
+                };
+                // Copy all properties from original require
+                Object.keys(originalRequire).forEach(key => {
+                  if (key !== 'prototype' && key !== 'length' && key !== 'name') {
+                    patchedRequire[key] = originalRequire[key];
+                  }
+                });
+                globalThis.__webpack_require__ = patchedRequire;
+                console.log('[Mock ScriptManager] ✓ Patched __webpack_require__ to handle @swc/helpers modules');
+              }
+              
+              // Ensure webpack helper methods exist on the script's __webpack_require__
+              if (typeof globalThis.__webpack_require__ === 'function') {
+                if (!globalThis.__webpack_require__.d) {
+                  globalThis.__webpack_require__.d = function(exports, definition) {
+                    for (var key in definition) {
+                      if (Object.prototype.hasOwnProperty.call(definition, key) && !Object.prototype.hasOwnProperty.call(exports, key)) {
+                        Object.defineProperty(exports, key, {
+                          enumerable: true,
+                          get: definition[key]
+                        });
+                      }
+                    }
+                  };
+                }
+                if (!globalThis.__webpack_require__.r) {
+                  globalThis.__webpack_require__.r = function(exports) {
+                    if (typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+                      Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+                    }
+                    Object.defineProperty(exports, '__esModule', { value: true });
+                  };
+                }
+                if (!globalThis.__webpack_require__.n) {
+                  globalThis.__webpack_require__.n = function(module) {
+                    var getter = module && module.__esModule
+                      ? function getDefault() { return module['default']; }
+                      : function getModuleExports() { return module; };
+                    globalThis.__webpack_require__.d(getter, { a: getter });
+                    return getter;
+                  };
+                }
+                if (!globalThis.__webpack_require__.o) {
+                  globalThis.__webpack_require__.o = function(object, property) {
+                    return Object.prototype.hasOwnProperty.call(object, property);
+                  };
+                }
+              }
+              
+              if (!globalThis.__webpack_require__.federation) {
+                globalThis.__webpack_require__.federation = globalThis.__hostFederation__;
+                console.log('[Mock ScriptManager] ✓ Injected host federation into script\'s __webpack_require__');
+              } else if (globalThis.__webpack_require__.federation.instance !== globalThis.__hostFederation__.instance) {
+                globalThis.__webpack_require__.federation.instance = globalThis.__hostFederation__.instance;
+                console.log('[Mock ScriptManager] ✓ Replaced script\'s federation.instance with host\'s instance');
+                // Re-wrap set() since we replaced the instance
+                if (globalThis.__webpack_require__.federation.instance && globalThis.__webpack_require__.federation.instance.set) {
+                  const originalSet = globalThis.__webpack_require__.federation.instance.set;
+                  globalThis.__webpack_require__.federation.instance.set = function(key, container) {
+                    console.log('[Mock ScriptManager] federation.instance.set() called with key: ' + key);
+                    const result = originalSet.apply(this, arguments);
+                    if (container && typeof container.get === 'function') {
+                      globalThis[key] = container;
+                      if (key === 'hello_remote') {
+                        globalThis.hello_remote = container;
+                      }
+                      console.log('[Mock ScriptManager] ✓ Container registered and stored: ' + key);
+                    }
+                    return result;
+                  };
+                }
+              }
+            }
+            
+            // Check for container after execution (might have been created despite Logger error)
+            if (globalThis[scriptId]) {
+              if (scriptId === 'hello_remote') {
+                globalThis.hello_remote = globalThis[scriptId];
+              }
+              console.log('[Mock ScriptManager] ✓ Container found in globalThis: ' + scriptId);
+              return Promise.resolve(null);
+            }
+            
+            // Try to get container from federation.instance
+            if (globalThis.__webpack_require__ && globalThis.__webpack_require__.federation && globalThis.__webpack_require__.federation.instance) {
+              const instance = globalThis.__webpack_require__.federation.instance;
+              if (instance.get && typeof instance.get === 'function') {
+                try {
+                  const containerPromise = instance.get(scriptId);
+                  if (containerPromise && typeof containerPromise.then === 'function') {
+                    containerPromise.then((container) => {
+                      if (container && typeof container.get === 'function') {
+                        globalThis[scriptId] = container;
+                        if (scriptId === 'hello_remote') {
+                          globalThis.hello_remote = container;
+                        }
+                        console.log('[Mock ScriptManager] ✓ Container retrieved via federation.instance.get');
+                      }
+                    }).catch(() => {});
+                  } else if (containerPromise && typeof containerPromise.get === 'function') {
+                    globalThis[scriptId] = containerPromise;
+                    if (scriptId === 'hello_remote') {
+                      globalThis.hello_remote = containerPromise;
+                    }
+                    console.log('[Mock ScriptManager] ✓ Container retrieved synchronously');
+                  }
+                } catch (e) {
+                  console.log('[Mock ScriptManager] Error getting container: ' + e.message);
+                }
+              }
+            }
+            
+            // Wait a bit for async container registration
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Check federation.instance containers directly
+            if (globalThis.__webpack_require__ && globalThis.__webpack_require__.federation && globalThis.__webpack_require__.federation.instance) {
+              const instance = globalThis.__webpack_require__.federation.instance;
+              if (instance.containers && instance.containers[scriptId]) {
+                const container = instance.containers[scriptId];
+                if (container && typeof container.get === 'function') {
+                  globalThis[scriptId] = container;
+                  if (scriptId === 'hello_remote') {
+                    globalThis.hello_remote = container;
+                  }
+                  console.log('[Mock ScriptManager] ✓ Container found in federation.instance.containers: ' + scriptId);
+                  return Promise.resolve(null);
+                }
+              }
+            }
+            
+            // Final check
+            if (globalThis[scriptId]) {
+              if (scriptId === 'hello_remote') {
+                globalThis.hello_remote = globalThis[scriptId];
+              }
+              console.log('[Mock ScriptManager] ✓ Container found after wait: ' + scriptId);
+              return Promise.resolve(null);
+            }
+            
+            // If we got here, script executed but container not found
+            // Log detailed debugging info
+            console.warn('[Mock ScriptManager] Script executed but container not found');
+            console.log('[Mock ScriptManager] Debugging info:');
+            console.log('[Mock ScriptManager] - scriptId: ' + scriptId);
+            console.log('[Mock ScriptManager] - globalThis[scriptId]: ' + typeof globalThis[scriptId]);
+            if (globalThis.__webpack_require__) {
+              console.log('[Mock ScriptManager] - __webpack_require__ exists');
+              if (globalThis.__webpack_require__.federation) {
+                console.log('[Mock ScriptManager] - federation exists');
+                if (globalThis.__webpack_require__.federation.instance) {
+                  console.log('[Mock ScriptManager] - instance exists');
+                  if (globalThis.__webpack_require__.federation.instance.containers) {
+                    const containerKeys = Object.keys(globalThis.__webpack_require__.federation.instance.containers);
+                    console.log('[Mock ScriptManager] - containers keys: ' + containerKeys.join(', '));
+                  }
+                }
+              }
+            }
+            return Promise.resolve(null);
+            
+            // If injected script didn't work, check if container was created
+            if (!result.success && !result.containerCreated) {
+              // Check one more time if container exists (it might have been created during error)
+              if (globalThis[scriptId]) {
+                // Store container in globalThis for easier access
+                if (scriptId === 'hello_remote') {
+                  globalThis.hello_remote = globalThis[scriptId];
+                }
+                console.log('[Mock ScriptManager] Container ' + scriptId + ' found after error - continuing');
+                // Patch modules and require
+                if (globalThis.__webpack_modules__) {
+                  loggerModuleIds.forEach(moduleId => {
+                    globalThis.__webpack_modules__[moduleId] = function(module) {
+                      module.exports = { Logger: mockLogger };
+                    };
+                  });
+                }
+                if (globalThis.__webpack_require__ && typeof globalThis.__webpack_require__ === 'function') {
+                  const originalRequire = globalThis.__webpack_require__;
+                  if (!originalRequire._wrapped) {
+                    globalThis.__webpack_require__ = function(moduleId) {
+                      try {
+                        const result = originalRequire.apply(this, arguments);
+                        if (moduleId && (moduleId.includes('Logger') || moduleId.includes('logging') || moduleId.includes('log.js'))) {
+                          if (!result || !result.Logger) {
+                            return { Logger: mockLogger };
+                          }
+                        }
+                        return result || {};
+                      } catch (e) {
+                        if (moduleId && (moduleId.includes('Logger') || moduleId.includes('logging') || moduleId.includes('log.js'))) {
+                          return { Logger: mockLogger };
+                        }
+                        throw e;
+                      }
+                    };
+                    globalThis.__webpack_require__._wrapped = true;
+                    Object.keys(originalRequire).forEach(key => {
+                      if (key !== 'prototype' && key !== 'length' && key !== 'name' && key !== '_wrapped') {
+                        globalThis.__webpack_require__[key] = originalRequire[key];
+                      }
+                    });
+                  }
+                }
+                return Promise.resolve(null);
+              }
+              throw result.error || new Error('Script execution failed');
+            }
+          } catch (evalError) {
+            // If modified script fails, check if container was created despite error
+            if (evalError.message && evalError.message.includes('Logger')) {
+              console.warn(`[Mock ScriptManager] Logger error during execution: ${evalError.message}`);
+              
+              // Wait a bit and check if container was created (async initialization)
+              // Sometimes the container is created asynchronously despite the error
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              // Check if container was created despite the error
+              if (globalThis[scriptId]) {
+                // Store container in globalThis for easier access
+                if (scriptId === 'hello_remote') {
+                  globalThis.hello_remote = globalThis[scriptId];
+                }
+                console.log('[Mock ScriptManager] Container ' + scriptId + ' created despite Logger error - continuing');
+                // Patch modules and require for future use
+                if (globalThis.__webpack_modules__) {
+                  loggerModuleIds.forEach(moduleId => {
+                    globalThis.__webpack_modules__[moduleId] = function(module) {
+                      module.exports = { Logger: mockLogger };
+                    };
+                  });
+                }
+                if (globalThis.__webpack_require__ && typeof globalThis.__webpack_require__ === 'function') {
+                  const originalRequire = globalThis.__webpack_require__;
+                  if (!originalRequire._wrapped) {
+                    globalThis.__webpack_require__ = function(moduleId) {
+                      try {
+                        const result = originalRequire.apply(this, arguments);
+                        if (moduleId && (moduleId.includes('Logger') || moduleId.includes('logging') || moduleId.includes('log.js'))) {
+                          if (!result || !result.Logger) {
+                            return { Logger: mockLogger };
+                          }
+                        }
+                        return result || {};
+                      } catch (e) {
+                        if (moduleId && (moduleId.includes('Logger') || moduleId.includes('logging') || moduleId.includes('log.js'))) {
+                          return { Logger: mockLogger };
+                        }
+                        throw e;
+                      }
+                    };
+                    globalThis.__webpack_require__._wrapped = true;
+                    Object.keys(originalRequire).forEach(key => {
+                      if (key !== 'prototype' && key !== 'length' && key !== 'name' && key !== '_wrapped') {
+                        globalThis.__webpack_require__[key] = originalRequire[key];
+                      }
+                    });
+                  }
+                }
+                // Success - container exists, ignore Logger error
+                return Promise.resolve(null);
+              }
+            }
+            
+            // If container wasn't created, try original script with post-patching
+            console.warn('[Mock ScriptManager] Modified script failed: ' + evalError.message);
+            
+            try {
+              // Mock module, exports, and hotEmitter before execution
+              const originalModule = globalThis.module;
+              const originalExports = globalThis.exports;
+              const originalHotEmitter = globalThis.hotEmitter;
+              
+              if (!globalThis.module) {
+                globalThis.module = { exports: {} };
+              }
+              if (!globalThis.exports) {
+                globalThis.exports = globalThis.module.exports;
+              }
+              if (!globalThis.hotEmitter) {
+                globalThis.hotEmitter = {
+                  on: () => {},
+                  emit: () => {},
+                  removeListener: () => {},
+                  removeAllListeners: () => {},
+                };
+              }
+              
+              try {
+                const fn2 = new Function(script);
+                fn2();
+              } finally {
+                if (originalModule === undefined) {
+                  delete globalThis.module;
+                } else {
+                  globalThis.module = originalModule;
+                }
+                if (originalExports === undefined) {
+                  delete globalThis.exports;
+                } else {
+                  globalThis.exports = originalExports;
+                }
+                if (originalHotEmitter === undefined) {
+                  delete globalThis.hotEmitter;
+                } else {
+                  globalThis.hotEmitter = originalHotEmitter;
+                }
+              }
+              
+              // Patch after execution
+              if (globalThis.__webpack_modules__) {
+                loggerModuleIds.forEach(moduleId => {
+                  globalThis.__webpack_modules__[moduleId] = function(module) {
+                    module.exports = { Logger: mockLogger };
+                  };
+                });
+              }
+              
+              // Wrap __webpack_require__
+              if (globalThis.__webpack_require__ && typeof globalThis.__webpack_require__ === 'function') {
+                const originalRequire = globalThis.__webpack_require__;
+                if (!originalRequire._wrapped) {
+                  globalThis.__webpack_require__ = function(moduleId) {
+                    try {
+                      const result = originalRequire.apply(this, arguments);
+                      if (moduleId && (moduleId.includes('Logger') || moduleId.includes('logging') || moduleId.includes('log.js'))) {
+                        if (!result || !result.Logger) {
+                          return { Logger: mockLogger };
+                        }
+                      }
+                      return result || {};
+                    } catch (e) {
+                      if (moduleId && (moduleId.includes('Logger') || moduleId.includes('logging') || moduleId.includes('log.js'))) {
+                        return { Logger: mockLogger };
+                      }
+                      throw e;
+                    }
+                  };
+                  globalThis.__webpack_require__._wrapped = true;
+                  Object.keys(originalRequire).forEach(key => {
+                    if (key !== 'prototype' && key !== 'length' && key !== 'name' && key !== '_wrapped') {
+                      globalThis.__webpack_require__[key] = originalRequire[key];
+                    }
+                  });
+                }
+              }
+            } catch (e2) {
+              throw evalError;
+            }
+          } finally {
+            // Restore original defineProperty
+            Object.defineProperty = originalDefineProperty;
+          }
+          
+          // After script runs, merge our Logger mocks back into the script's modules
+          // This ensures Logger is available even if script overwrote __webpack_modules__
+          if (globalThis.__webpack_modules__) {
+            loggerModuleIds.forEach(moduleId => {
+              // Only add if not already defined (script might have its own)
+              if (!globalThis.__webpack_modules__[moduleId]) {
+                globalThis.__webpack_modules__[moduleId] = function(module) {
+                  // Export as { Logger: ... } format
+                  module.exports = { Logger: mockLogger };
+                };
+              } else {
+                // If script defined it but it's failing, replace with our mock
+                try {
+                  const testModule = { exports: {} };
+                  globalThis.__webpack_modules__[moduleId](testModule, testModule.exports, globalThis.__webpack_require__);
+                  // Check if result has Logger property
+                  if (!testModule.exports || !testModule.exports.Logger) {
+                    throw new Error('Logger property missing');
+                  }
+                } catch (e) {
+                  // Replace with our mock if script's version fails or doesn't export Logger
+                  globalThis.__webpack_modules__[moduleId] = function(module) {
+                    module.exports = { Logger: mockLogger };
+                  };
+                }
+              }
+            });
+          }
+          
+          // After script runs, ensure __webpack_require__ handles Logger
+          const scriptRequire = globalThis.__webpack_require__;
+          if (scriptRequire && typeof scriptRequire === 'function') {
+            const wrappedRequire = function(moduleId) {
+              try {
+                const result = scriptRequire.apply(this, arguments);
+                if (result == null && (moduleId.includes('Logger') || moduleId.includes('logging') || moduleId.includes('log.js'))) {
+                  return mockLogger;
+                }
+                return result || {};
+              } catch (e) {
+                if (moduleId.includes('Logger') || moduleId.includes('logging') || moduleId.includes('log.js')) {
+                  return mockLogger;
+                }
+                throw e;
+              }
+            };
+            
+            Object.keys(scriptRequire).forEach(key => {
+              if (key !== 'prototype' && key !== 'length' && key !== 'name') {
+                wrappedRequire[key] = scriptRequire[key];
+              }
+            });
+            
+            globalThis.__webpack_require__ = wrappedRequire;
+          }
+          
+          // After script loads, try to find and store the container
+          // Module Federation stores containers in various places
+          if (!globalThis[scriptId]) {
+            // Debug: Log what's in __webpack_require__
+            if (globalThis.__webpack_require__) {
+              console.log('[Mock ScriptManager] __webpack_require__ exists');
+              if (globalThis.__webpack_require__.cache) {
+                const cacheKeys = Object.keys(globalThis.__webpack_require__.cache);
+                console.log('[Mock ScriptManager] Cache keys: ' + cacheKeys.slice(0, 10).join(', ') + ' (showing first 10)');
+                
+                // Check __webpack_require__.cache
+                for (const key of cacheKeys) {
+                  const cached = globalThis.__webpack_require__.cache[key];
+                  if (cached && cached.exports) {
+                    // Check if this looks like a container (has get method)
+                    if (cached.exports.get && typeof cached.exports.get === 'function') {
+                      globalThis[scriptId] = cached.exports;
+                      if (scriptId === 'hello_remote') {
+                        globalThis.hello_remote = cached.exports;
+                      }
+                      console.log('[Mock ScriptManager] Found container in cache: ' + key);
+                      break;
+                    }
+                  }
+                }
+              }
+              
+              // Check if container is in __webpack_require__ itself
+              if (!globalThis[scriptId] && globalThis.__webpack_require__[scriptId]) {
+                globalThis[scriptId] = globalThis.__webpack_require__[scriptId];
+                if (scriptId === 'hello_remote') {
+                  globalThis.hello_remote = globalThis.__webpack_require__[scriptId];
+                }
+                console.log('[Mock ScriptManager] Found container in __webpack_require__[' + scriptId + ']');
+              }
+            }
+            
+            // Check if container is accessible via Module Federation runtime
+            // The container might be in the remote's __webpack_require__ scope
+            if (!globalThis[scriptId] && globalThis.__webpack_require__) {
+              // Try to access via the remote's module system
+              try {
+                // Module Federation containers are usually accessible via the remote name
+                const remoteModuleId = 'webpack/container/reference/' + scriptId;
+                if (globalThis.__webpack_require__.cache && globalThis.__webpack_require__.cache[remoteModuleId]) {
+                  const remoteModule = globalThis.__webpack_require__.cache[remoteModuleId];
+                  if (remoteModule && remoteModule.exports) {
+                    globalThis[scriptId] = remoteModule.exports;
+                    if (scriptId === 'hello_remote') {
+                      globalThis.hello_remote = remoteModule.exports;
+                    }
+                    console.log('[Mock ScriptManager] Found container via remote module: ' + remoteModuleId);
+                  }
+                }
+              } catch (e) {
+                // Ignore
+              }
+            }
+            
+            // Check __webpack_modules__ for container definition
+            if (!globalThis[scriptId] && globalThis.__webpack_modules__) {
+              const moduleKeys = Object.keys(globalThis.__webpack_modules__);
+              console.log('[Mock ScriptManager] __webpack_modules__ keys: ' + moduleKeys.slice(0, 10).join(', ') + ' (showing first 10)');
+              const containerKey = moduleKeys.find(k => k.includes(scriptId) || k.includes('container'));
+              if (containerKey) {
+                console.log('[Mock ScriptManager] Found potential container module: ' + containerKey);
+              }
+            }
+          }
+          
+          // Store container in globalThis for easy access
+          if (globalThis[scriptId] && scriptId === 'hello_remote') {
+            globalThis.hello_remote = globalThis[scriptId];
+          }
+          
+          console.log('[Mock ScriptManager] Loaded: ' + scriptId + (globalThis[scriptId] ? ' (container found)' : ' (container not found)'));
+        } catch (evalError) {
+          // If evaluation fails, check if container was still created
+          console.warn('[Mock ScriptManager] Script evaluation warning: ' + evalError.message);
+          
+          // Try to manually create the container if script partially executed
+          if (!globalThis[scriptId] && globalThis.__webpack_modules__) {
+            // Check if we can find the container definition in modules
+            const containerModuleId = Object.keys(globalThis.__webpack_modules__).find(id => 
+              id.includes(scriptId) || id.includes('container')
+            );
+            
+            if (containerModuleId) {
+              try {
+                const module = { exports: {} };
+                const moduleFn = globalThis.__webpack_modules__[containerModuleId];
+                const safeRequire = function(id) {
+                  if (id.includes('Logger') || id.includes('logging') || id.includes('log.js')) {
+                    return mockLogger;
+                  }
+                  return {};
+                };
+                moduleFn(module, module.exports, safeRequire);
+                if (module.exports && !globalThis[scriptId]) {
+                  globalThis[scriptId] = module.exports;
+                  console.log('[Mock ScriptManager] Manually created container ' + scriptId);
+                }
+              } catch (e) {
+                // Ignore
+              }
+            }
+          }
+          
+          if (!globalThis[scriptId]) {
+            throw evalError;
+          }
+          // Store container in globalThis for easier access
+          if (scriptId === 'hello_remote') {
+            globalThis.hello_remote = globalThis[scriptId];
+          }
+          console.log('[Mock ScriptManager] Container ' + scriptId + ' created despite warnings');
+        }
+      } catch (e) {
+        console.error('[Mock ScriptManager] Failed: ' + scriptId + ' - ' + e.message);
+        console.error(`[Mock ScriptManager] Error details:`, e);
+        throw e;
+      } finally {
+        // Restore original globals if we modified them
+        if (originalWindow === undefined) {
+          delete globalThis.window;
+        } else {
+          globalThis.window = originalWindow;
+        }
+        if (originalSelf === undefined) {
+          delete globalThis.self;
+        } else {
+          globalThis.self = originalSelf;
+        }
+        if (originalHotEmitter === undefined) {
+          delete globalThis.hotEmitter;
+        } else {
+          globalThis.hotEmitter = originalHotEmitter;
+        }
+        if (originalInteropRequireDefault === undefined) {
+          delete globalThis._interop_require_default;
+        } else {
+          globalThis._interop_require_default = originalInteropRequireDefault;
+        }
+      }
+      
+      return Promise.resolve(null);
+  }
+  console.warn('[Mock ScriptManager] No URL for: ' + scriptId + ', entry: ' + entry + ', context keys: ' + (context ? Object.keys(context).join(', ') : 'null'));
+  return Promise.resolve(null);
+};
+
+MockScriptManager.prototype.prefetchScript = async function(_scriptId, _config) {
+  return Promise.resolve(null);
+};
+
+MockScriptManager.prototype.invalidateScripts = async function(_scripts) {
+  return Promise.resolve(null);
+};
+
+MockScriptManager.prototype.unstable_evaluateScript = function(_scriptSource, _scriptSourceUrl) {
+  try {
+    // Mock module, exports, and hotEmitter before execution
+    const originalModule = globalThis.module;
+    const originalExports = globalThis.exports;
+    const originalHotEmitter = globalThis.hotEmitter;
+    
+    if (!globalThis.module) {
+      globalThis.module = { exports: {} };
+    }
+    if (!globalThis.exports) {
+      globalThis.exports = globalThis.module.exports;
+    }
+    if (!globalThis.hotEmitter) {
+      globalThis.hotEmitter = {
+        on: () => {},
+        emit: () => {},
+        removeListener: () => {},
+        removeAllListeners: () => {},
+      };
+    }
+    
+    try {
+      const fn = new Function(_scriptSource);
+      fn();
+    } finally {
+      if (originalModule === undefined) {
+        delete globalThis.module;
+      } else {
+        globalThis.module = originalModule;
+      }
+      if (originalExports === undefined) {
+        delete globalThis.exports;
+      } else {
+        globalThis.exports = originalExports;
+      }
+      if (originalHotEmitter === undefined) {
+        delete globalThis.hotEmitter;
+      } else {
+        globalThis.hotEmitter = originalHotEmitter;
+      }
+    }
+    
+    return true;
+  } catch (e) {
+    console.warn('Mock ScriptManager: Failed to evaluate script:', e);
+    return false;
+  }
+};
+
+// Create an instance with proper prototype
+function getMockModule() {
+  return new MockScriptManager();
+}
+const mockModule = getMockModule();
+
+// Patch getEnforcing to return our mock if the real module isn't found
+// This prevents errors when code calls getEnforcing instead of get
+// Note: This patch might already be applied in main.tsx, but we do it here too for safety
+const originalGetEnforcing = TurboModuleRegistry.getEnforcing;
+if (originalGetEnforcing && !realModule) {
+  TurboModuleRegistry.getEnforcing = function(moduleName) {
+    if (moduleName === 'ScriptManager') {
+      // Return the mock instead of throwing
+      return mockModule;
+    }
+    return originalGetEnforcing.call(this, moduleName);
+  };
+}
+
+// Export enums that are also exported by the real module
+const NormalizedScriptLocatorHTTPMethod = {
+  GET: 'GET',
+  POST: 'POST',
+};
+
+const NormalizedScriptLocatorSignatureVerificationMode = {
+  STRICT: 'strict',
+  LAX: 'lax',
+  OFF: 'off',
+};
+
+// Export the module (real if available, mock otherwise)
+const exportedModule = realModule || mockModule;
+
+// Add enum properties to the exported module
+if (!exportedModule.NormalizedScriptLocatorHTTPMethod) {
+  exportedModule.NormalizedScriptLocatorHTTPMethod = NormalizedScriptLocatorHTTPMethod;
+}
+if (!exportedModule.NormalizedScriptLocatorSignatureVerificationMode) {
+  exportedModule.NormalizedScriptLocatorSignatureVerificationMode = NormalizedScriptLocatorSignatureVerificationMode;
+}
+
+module.exports = exportedModule;
+
+

@@ -6,10 +6,14 @@
   "scripts": {
     "test": "nx test",
     "web-shell:serve": "nx serve web-shell",
+    "mobile-shell:serve": "nx serve mobile-shell",
     "mobile-shell:ios": "nx run mobile-shell:ios",
     "mobile-shell:android": "nx run mobile-shell:android",
     "hello-remote:serve": "nx serve hello-remote",
     "hello-remote:serve:no-daemon": "NX_DAEMON=false nx serve hello-remote",
+    "hello-remote:serve:mobile": "nx run hello-remote:serve:mobile",
+    "hello-remote:build:mobile": "nx run hello-remote:build:mobile",
+    "adb:reverse": "adb reverse tcp:8081 tcp:8081 && adb reverse tcp:9004 tcp:9004 && echo '✓ Port forwarding set up (8081 and 9004)'",
     "kill:servers": "lsof -ti:4200,9003,8081 2>/dev/null | xargs kill -9 2>/dev/null || true; pkill -f 'nx serve' 2>/dev/null || true; pkill -f 'rspack' 2>/dev/null || true; echo 'All servers stopped'",
     "nx:reset": "nx reset && rm -rf .nx/cache .nx/workspace-data 2>/dev/null; echo '✓ Nx cache and daemon reset'",
     "web-shell:serve:no-daemon": "NX_DAEMON=false nx serve web-shell"
@@ -19,6 +23,7 @@
   "license": "ISC",
   "dependencies": {
     "@callstack/repack": "^5.2.2",
+    "@react-native-async-storage/async-storage": "^2.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-native": "~0.79.3",

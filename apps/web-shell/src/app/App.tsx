@@ -8,7 +8,8 @@ async function loadRemoteComponent() {
 }
 
 function App() {
-  const [RemoteComponent, setRemoteComponent] = useState<React.ComponentType | null>(null);
+  const [RemoteComponent, setRemoteComponent] =
+    useState<React.ComponentType | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleLoadRemote = async () => {
@@ -26,7 +27,11 @@ function App() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Universal MFE Seed</Text>
-      <Pressable style={styles.button} onPress={handleLoadRemote} disabled={loading}>
+      <Pressable
+        style={styles.button}
+        onPress={handleLoadRemote}
+        disabled={loading}
+      >
         <Text style={styles.buttonText}>
           {loading ? 'Loading...' : 'Load Hello Remote'}
         </Text>

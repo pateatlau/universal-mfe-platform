@@ -1,40 +1,35 @@
-import React, { useState } from 'react';
+// apps/mobile-shell/src/app/App.tsx
+import React, { Suspense, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Federated } from '@callstack/repack/client';
 
-// Remote loading function
-async function loadRemoteComponent() {
-  const container = await import('hello_remote/HelloRemote');
-  return container.HelloRemote || container.default;
-}
+// Use Federated.importModule with React.lazy
+// Remote name must match exactly with rspack.config.js remotes config
+const RemoteHello = React.lazy(() =>
+  Federated.importModule('hello_remote', './HelloRemote')
+);
 
 const App = () => {
-  const [RemoteComponent, setRemoteComponent] = useState<React.ComponentType | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [showRemote, setShowRemote] = useState(false);
 
-  const handleLoadRemote = async () => {
-    setLoading(true);
-    try {
-      const Component = await loadRemoteComponent();
-      setRemoteComponent(() => Component);
-    } catch (error) {
-      console.error('Failed to load remote:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handleLoadRemote = () => {
+    console.log('[App] Loading remote component...');
+    setShowRemote(true);
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Universal MFE Seed</Text>
-      <Pressable style={styles.button} onPress={handleLoadRemote} disabled={loading}>
-        <Text style={styles.buttonText}>
-          {loading ? 'Loading...' : 'Load Hello Remote'}
-        </Text>
+      <Pressable style={styles.button} onPress={handleLoadRemote}>
+        <Text style={styles.buttonText}>Load Hello Remote</Text>
       </Pressable>
-      {RemoteComponent && (
-        <View style={styles.remoteContainer}>
-          <RemoteComponent />
-        </View>
+
+      {showRemote && (
+        <Suspense
+          fallback={<Text style={styles.loadingText}>Loading remote…</Text>}
+        >
+          <RemoteHello />
+        </Suspense>
       )}
     </View>
   );
@@ -66,10 +61,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  remoteContainer: {
+  loadingText: {
+    fontSize: 16,
+    color: '#666666',
     marginTop: 20,
-    width: '100%',
-    alignItems: 'center',
   },
 });
 

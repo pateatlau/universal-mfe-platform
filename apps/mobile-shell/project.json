@@ -5,6 +5,35 @@
   "projectType": "application",
   "tags": [],
   "targets": {
+    "build": {
+      "executor": "@nx/rspack:rspack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "outputPath": "dist/apps/mobile-shell",
+        "main": "apps/mobile-shell/src/main.tsx",
+        "tsConfig": "apps/mobile-shell/tsconfig.app.json",
+        "rspackConfig": "apps/mobile-shell/rspack.config.js",
+        "assets": []
+      },
+      "configurations": {
+        "development": {
+          "mode": "development"
+        },
+        "production": {
+          "mode": "production"
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "react-native start",
+        "cwd": "apps/mobile-shell"
+      },
+      "configurations": {}
+    },
     "ios": {
       "executor": "@nx/react-native:run-ios",
       "options": {}
